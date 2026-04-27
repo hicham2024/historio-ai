@@ -1006,8 +1006,19 @@ export default function App() {
         </section>
       </main>
 
-      <footer style={{ textAlign: "center", padding: "20px", fontSize: "12px", color: "#78716c" }}>
-        ولد صنهاجة
+      <footer style={{ textAlign: "center", padding: "28px 20px", marginTop: "20px" }}>
+        <div style={{
+          display: "inline-block",
+          padding: "8px 16px",
+          borderTop: "1px solid #e2d8c8",
+          color: "#0f766e",
+          fontSize: "13px",
+          fontWeight: 700,
+          letterSpacing: "0.5px",
+          fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
+        }}>
+          ✦ ولد صنهاجة ✦
+        </div>
       </footer>
     </div>
   );
