@@ -1005,6 +1005,10 @@ export default function App() {
           </div>
         </section>
       </main>
+
+      <footer style={{ textAlign: "center", padding: "20px", fontSize: "12px", color: "#78716c" }}>
+        ولد صنهاجة
+      </footer>
     </div>
   );
 }
