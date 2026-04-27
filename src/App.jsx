@@ -8,7 +8,6 @@ import {
   Lock,
   Heart,
   QrCode,
-  CreditCard,
   Download,
   LogOut,
 } from "lucide-react";
@@ -25,8 +24,7 @@ const SOURCE_COLORS = {
   gallica: "#9a3412",
 };
 
-const PAYPAL_LINK = "https://paypal.me/votrepage/10";
-const CARD_LINK = "https://ton-lien-stripe-ou-mollie";
+const PAYPAL_LINK = "https://paypal.me/rehicham";
 
 function stripHtml(value = "") {
   return String(value)
@@ -53,9 +51,9 @@ function scoreResult(item, keyword) {
   let score = 0;
 
   if (title.includes(query)) score += 50;
-  if (item.directPdf) score += 30;
+  if (item.directPdf) score += 35;
   if (item.source === "archive") score += 15;
-  if (item.source === "gallica") score += 12;
+  if (item.source === "gallica") score += 15;
 
   const year = getYear(item.date);
   if (year && year <= 1950) score += 10;
@@ -183,13 +181,20 @@ async function searchGoogleBooks(keyword) {
   }
 }
 
-function getGallicaPdfUrl(pageUrl) {
+function getGallicaArkFromUrl(pageUrl) {
   if (!pageUrl) return "";
 
+  // Gallica utilise généralement ce format : ark:/12148/bpt6k...
   const match = pageUrl.match(/ark:\/[0-9]+\/[^/?#]+/);
-  if (!match) return "";
+  return match ? match[0] : "";
+}
 
-  return `https://gallica.bnf.fr/${match[0]}.pdf`;
+function getGallicaPdfUrl(pageUrl) {
+  const ark = getGallicaArkFromUrl(pageUrl);
+  if (!ark) return "";
+
+  // Lien PDF officiel Gallica : https://gallica.bnf.fr/ark:/12148/xxxx.pdf
+  return `https://gallica.bnf.fr/${ark}.pdf`;
 }
 
 function parseGallicaXml(xmlText) {
@@ -359,7 +364,7 @@ export default function App() {
         body: formData.toString(),
       });
     } catch {
-      // L’utilisateur peut continuer même si Netlify Forms ne répond pas.
+      // L'utilisateur peut continuer même si Netlify Forms ne répond pas.
     }
 
     localStorage.setItem("histobook_user_email", value);
@@ -548,9 +553,10 @@ export default function App() {
 
         .donation-grid {
           display: grid;
-          grid-template-columns: repeat(2, 1fr);
+          grid-template-columns: 1fr;
           gap: 10px;
           margin-top: 12px;
+          max-width: 280px;
         }
 
         .donation-card {
@@ -787,10 +793,6 @@ export default function App() {
             padding: 12px;
           }
 
-          .donation-grid {
-            grid-template-columns: 1fr;
-          }
-
           .layout {
             grid-template-columns: 1fr;
           }
@@ -813,8 +815,8 @@ export default function App() {
         <div className="top-inner">
           <div className="brand">
             <BookOpen size={32} />
-            <strong>Histo</strong>
-            <span>book</span>
+            <strong>Histobook</strong>
+            <span>PDF</span>
           </div>
 
           <div className="subtitle">
@@ -850,8 +852,7 @@ export default function App() {
               </div>
 
               <div>
-                Entrez votre e-mail pour accéder à la recherche. Votre adresse
-                ne sera pas affichée sur la page.
+                Entrez votre e-mail pour accéder à la recherche. Votre adresse ne sera pas affichée sur la page.
               </div>
 
               <form onSubmit={connectWithEmail}>
@@ -874,8 +875,7 @@ export default function App() {
               <strong>Soutenez le projet Histobook ❤️</strong>
 
               <div>
-                Chaque don aide à améliorer l’accès aux livres et archives
-                historiques gratuites.
+                Chaque don aide à améliorer l’accès aux livres et archives historiques gratuites.
               </div>
 
               <div className="donation-amounts">
@@ -892,16 +892,6 @@ export default function App() {
                   </a>
                   <div className="qr">
                     <QrCode size={26} />
-                  </div>
-                </div>
-
-                <div className="donation-card">
-                  <strong>Carte / Bancontact</strong>
-                  <a href={CARD_LINK} target="_blank" rel="noreferrer">
-                    Carte / Bancontact
-                  </a>
-                  <div className="qr">
-                    <CreditCard size={26} />
                   </div>
                 </div>
               </div>
