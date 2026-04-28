@@ -884,15 +884,19 @@ export default function App() {
                 <span className="amount-pill">20 €</span>
               </div>
 
-              <div className="donation-grid">
-                <div className="donation-card">
-                  <strong>PayPal</strong>
-                  <a href={PAYPAL_LINK} target="_blank" rel="noreferrer">
-                    Donner via PayPal
-                  </a>
-                  <div className="qr">
-                    <QrCode size={26} />
-                  </div>
+              <div style={{ textAlign: "center", marginTop: "10px" }}>
+  <a href="https://paypal.me/rehicham" target="_blank" rel="noreferrer" style={{
+    display: "inline-block",
+    padding: "10px 18px",
+    background: "#f59e0b",
+    color: "#111",
+    fontWeight: "bold",
+    textDecoration: "none",
+    borderRadius: "6px"
+  }}>
+    💛 Donner via PayPal
+  </a>
+</div>
                 </div>
               </div>
             </div>
