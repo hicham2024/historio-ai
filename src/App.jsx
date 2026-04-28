@@ -42,8 +42,7 @@ function getYear(value = "") {
 
 function buildQueries(keyword) {
   const clean = keyword.trim();
-  return [clean, `${clean} pdf`, `${clean} book`, `${clean} livre`, `${clean} تاريخ`];
-}
+return [clean];}
 
 function scoreResult(item, keyword) {
   const query = keyword.toLowerCase();
@@ -89,7 +88,7 @@ async function searchArchive(keyword) {
       (field) => params.append("fl[]", field)
     );
 
-    params.set("rows", "18");
+    params.set("rows", "8");
     params.set("page", "1");
     params.set("output", "json");
 
