@@ -325,7 +325,7 @@ function ResultItem({ item }) {
 }
 
 export default function App() {
-  const [keyword, setKeyword] = useState("tribes of morocco");
+  const [keyword, setKeyword] = useState("");
   const [email, setEmail] = useState(
     localStorage.getItem("histobook_user_email") || ""
   );
