@@ -45,13 +45,7 @@ function getYear(value = "") {
 
 function buildQueries(keyword) {
   const clean = keyword.trim();
-  return [
-    clean,
-    clean + " pdf",
-    clean + " history",
-    clean + " livre",
-    clean + " archive"
-  ];
+  return [clean];
 }
 
 function ciaSearchUrl(keyword) {
@@ -106,8 +100,8 @@ async function searchArchive(keyword) {
       (field) => params.append("fl[]", field)
     );
 
-    params.set("rows", "30");
-    params.set("page", "2");
+    params.set("rows", "8");
+    params.set("page", "1");
     params.set("output", "json");
 
     const response = await fetch(
@@ -155,7 +149,7 @@ async function searchGoogleBooks(keyword) {
   try {
     const params = new URLSearchParams();
     params.set("q", keyword);
-    params.set("maxResults", "30");
+    params.set("maxResults", "12");
     params.set("printType", "books");
     params.set("filter", "free-ebooks");
 
@@ -249,13 +243,13 @@ function parseGallicaXml(xmlText) {
 async function searchGallica(keyword) {
   try {
     const clean = keyword.replaceAll('"', "");
-    const query = `dc.title all "${clean}"`;
+    const query = `(dc.title all "${clean}") or (dc.description all "${clean}")`;
 
     const params = new URLSearchParams();
     params.set("operation", "searchRetrieve");
     params.set("version", "1.2");
     params.set("query", query);
-    params.set("maximumRecords", "20");
+    params.set("maximumRecords", "8");
 
     const response = await fetch(
       `https://gallica.bnf.fr/SRU?${params.toString()}`
@@ -382,8 +376,7 @@ export default function App() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState("all");
-  const [onlyPdf, setOnlyPdf] = useState(true);
-
+const [onlyPdf, setOnlyPdf] = useState(false);
   const filtered = useMemo(() => {
     return results.filter((item) => {
       if (sourceFilter !== "all" && item.source !== sourceFilter) return false;
