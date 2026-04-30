@@ -655,11 +655,9 @@ export default function App() {
             </div>
           )}
 
-          {!loading && filtered.length === 0 && (
+          {!loading && filtered.length === 0 && email && (
             <div className="empty">
-              {email
-                ? "Aucun PDF trouvé. Essayez un mot-clé plus simple, en anglais, ou désactivez “PDF direct uniquement”."
-                : "Connectez-vous avec votre e-mail pour lancer une recherche."}
+              Aucun PDF trouvé. Essayez un mot-clé plus simple ou désactivez “PDF direct uniquement”.
             </div>
           )}
 
