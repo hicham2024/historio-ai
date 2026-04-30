@@ -45,7 +45,13 @@ function getYear(value = "") {
 
 function buildQueries(keyword) {
   const clean = keyword.trim();
-  return [clean];
+  return [
+    clean,
+    clean + " pdf",
+    clean + " history",
+    clean + " livre",
+    clean + " archive"
+  ];
 }
 
 function ciaSearchUrl(keyword) {
@@ -100,8 +106,8 @@ async function searchArchive(keyword) {
       (field) => params.append("fl[]", field)
     );
 
-    params.set("rows", "8");
-    params.set("page", "1");
+    params.set("rows", "30");
+    params.set("page", "2");
     params.set("output", "json");
 
     const response = await fetch(
@@ -149,7 +155,7 @@ async function searchGoogleBooks(keyword) {
   try {
     const params = new URLSearchParams();
     params.set("q", keyword);
-    params.set("maxResults", "12");
+    params.set("maxResults", "30");
     params.set("printType", "books");
     params.set("filter", "free-ebooks");
 
@@ -249,7 +255,7 @@ async function searchGallica(keyword) {
     params.set("operation", "searchRetrieve");
     params.set("version", "1.2");
     params.set("query", query);
-    params.set("maximumRecords", "8");
+    params.set("maximumRecords", "20");
 
     const response = await fetch(
       `https://gallica.bnf.fr/SRU?${params.toString()}`
