@@ -475,8 +475,8 @@ export default function App() {
         .search-row input { flex: 1; border: 0; outline: 0; padding: 0 14px; font-size: 16px; background: #fffaf0; color: #14213d; }
         .search-row button { width: 58px; border: 0; background: #f59e0b; color: #111827; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .search-row.disabled { opacity: .55; pointer-events: none; }
-        .layout { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 190px 1fr; gap: 28px; padding: 24px 20px 60px; }
-        .sidebar { font-size: 14px; }
+        .layout { max-width: 1120px; margin: 0 auto; display: block; padding: 24px 20px 60px; }
+        .sidebar { display: none; }
         .filter-block { border-bottom: 1px solid #e2d8c8; padding-bottom: 18px; margin-bottom: 18px; }
         .filter-title { color: #7f1d1d; font-weight: 900; margin-bottom: 10px; }
         .filter-link { display: block; border: 0; background: none; padding: 5px 0; cursor: pointer; color: #14213d; font-size: 14px; text-align: left; }
@@ -496,8 +496,6 @@ export default function App() {
         .pdf-btn { color: #7f1d1d !important; }
         .source, .access { font-weight: 900; }
         .badge { justify-self: end; color: #7f1d1d; font-size: 12px; font-weight: 900; }
-        .signature { text-align: center; padding: 28px 20px; margin-top: 20px; }
-        .signature-inner { display: inline-block; padding: 8px 16px; border-top: 1px solid #e2d8c8; color: #0f766e; font-size: 13px; font-weight: 700; letter-spacing: .5px; }
         .spin { animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 760px) {
@@ -592,61 +590,16 @@ export default function App() {
       </header>
 
       <main className="layout">
-        <aside className="sidebar">
-          <div className="filter-block">
-            <div className="filter-title">Sources</div>
-
-            <button
-              className={`filter-link ${sourceFilter === "all" ? "active" : ""}`}
-              onClick={() => setSourceFilter("all")}
-            >
-              Toutes les sources
-            </button>
-
-            <button
-              className={`filter-link ${sourceFilter === "archive" ? "active" : ""}`}
-              onClick={() => setSourceFilter("archive")}
-            >
-              Archive.org
-            </button>
-
-            <button
-              className={`filter-link ${sourceFilter === "googleBooks" ? "active" : ""}`}
-              onClick={() => setSourceFilter("googleBooks")}
-            >
-              Google Books gratuit
-            </button>
-
-            <button
-              className={`filter-link ${sourceFilter === "gallica" ? "active" : ""}`}
-              onClick={() => setSourceFilter("gallica")}
-            >
-              Gallica / BnF
-            </button>
-          </div>
-
-          <div className="filter-block">
-            <div className="filter-title">Accès</div>
-
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={onlyPdf}
-                onChange={(e) => setOnlyPdf(e.target.checked)}
-              />
-              PDF direct uniquement
-            </label>
-          </div>
-        </aside>
-
         <section>
-          <div className="content-header">
-            <div className="content-title">Livres et PDF gratuits</div>
+          {(loading || results.length > 0) && (
+            <div className="content-header">
+              <div className="content-title">Livres et PDF gratuits</div>
 
-            <div className="count">
-              {filtered.length} résultat(s) affiché(s) sur {results.length} référence(s)
+              <div className="count">
+                {filtered.length} résultat(s) affiché(s) sur {results.length} référence(s)
+              </div>
             </div>
-          </div>
+          )}
 
           {loading && (
             <div className="loading">
@@ -655,7 +608,7 @@ export default function App() {
             </div>
           )}
 
-          {!loading && filtered.length === 0 && email && (
+          {!loading && results.length > 0 && filtered.length === 0 && email && (
             <div className="empty">
               Aucun PDF trouvé. Essayez un mot-clé plus simple ou désactivez “PDF direct uniquement”.
             </div>
@@ -668,10 +621,6 @@ export default function App() {
           </div>
         </section>
       </main>
-
-      <footer className="signature">
-        <div className="signature-inner">✦ ولد صنهاجة ✦</div>
-      </footer>
     </div>
   );
 }
