@@ -8,19 +8,26 @@ import {
   Lock,
   Download,
   LogOut,
+  Heart,
 } from "lucide-react";
 
 const SOURCES = {
   archive: "Archive.org",
   googleBooks: "Google Books",
   gallica: "Gallica / BnF",
+  cia: "CIA Reading Room",
+  noor: "Noor Book",
 };
 
 const SOURCE_COLORS = {
   archive: "#0f766e",
   googleBooks: "#7c3aed",
   gallica: "#9a3412",
+  cia: "#334155",
+  noor: "#2563eb",
 };
+
+const DONATION_LINK = "https://buy.stripe.com/cNi6oJfrj7Y5b367VDcV200";
 
 function stripHtml(value = "") {
   return String(value)
@@ -39,6 +46,14 @@ function getYear(value = "") {
 function buildQueries(keyword) {
   const clean = keyword.trim();
   return [clean];
+}
+
+function ciaSearchUrl(keyword) {
+  return `https://www.cia.gov/readingroom/search/site/${encodeURIComponent(keyword)}`;
+}
+
+function noorSearchUrl(keyword) {
+  return `https://www.noor-book.com/search?q=${encodeURIComponent(keyword)}`;
 }
 
 function scoreResult(item, keyword) {
@@ -248,6 +263,42 @@ async function searchGallica(keyword) {
   }
 }
 
+function searchCIA(keyword) {
+  return [
+    {
+      id: `cia-search-${keyword}`,
+      source: "cia",
+      title: `Recherche CIA Reading Room : ${keyword}`,
+      author: "Central Intelligence Agency",
+      date: "Source externe",
+      language: "English",
+      description:
+        "Ouvre la recherche officielle de la CIA Reading Room. Les documents déclassifiés sont consultables sur le site de la CIA.",
+      pageUrl: ciaSearchUrl(keyword),
+      directPdf: "",
+      access: "Recherche externe",
+    },
+  ];
+}
+
+function searchNoorBook(keyword) {
+  return [
+    {
+      id: `noor-search-${keyword}`,
+      source: "noor",
+      title: `Recherche Noor Book : ${keyword}`,
+      author: "Noor Book",
+      date: "Source externe",
+      language: "Arabic / multi-langue",
+      description:
+        "Ouvre la recherche Noor Book pour trouver des livres liés au mot-clé. Vérifiez toujours les droits et conditions de téléchargement.",
+      pageUrl: noorSearchUrl(keyword),
+      directPdf: "",
+      access: "Recherche externe",
+    },
+  ];
+}
+
 function dedupeResults(results) {
   const seen = new Set();
 
@@ -387,6 +438,8 @@ export default function App() {
         searchArchive(q),
         searchGoogleBooks(q),
         searchGallica(q),
+        Promise.resolve(searchCIA(q)),
+        Promise.resolve(searchNoorBook(q)),
       ])
     );
 
@@ -411,7 +464,8 @@ export default function App() {
         .brand span { color: #fbbf24; font-weight: 700; }
         .subtitle { margin-top: 6px; color: #d9f99d; font-size: 14px; }
         .userbar { max-width: 820px; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 16px; color: #fef3c7; font-size: 14px; }
-        .userbar button { border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); color: white; padding: 8px 12px; cursor: pointer; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; }
+        .userbar button, .don-btn { border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); color: white; padding: 8px 12px; cursor: pointer; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+        .don-btn { border-color: #fbbf24; color: #fef3c7; }
         .gate { max-width: 820px; margin-top: 16px; background: #fffbeb; color: #14213d; border: 2px solid #fbbf24; padding: 16px; box-shadow: 0 10px 24px rgba(0,0,0,.15); }
         .gate-title { color: #7f1d1d; font-weight: 900; display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
         .gate form { display: flex; gap: 8px; margin-top: 12px; }
@@ -478,11 +532,16 @@ export default function App() {
               )}
             </div>
 
-            {email && (
-              <button type="button" onClick={logout}>
-                <LogOut size={14} /> Déconnexion
-              </button>
-            )}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <a className="don-btn" href={DONATION_LINK} target="_blank" rel="noreferrer">
+                <Heart size={14} /> DONS
+              </a>
+              {email && (
+                <button type="button" onClick={logout}>
+                  <LogOut size={14} /> Déconnexion
+                </button>
+              )}
+            </div>
           </div>
 
           {!email && (
@@ -592,7 +651,7 @@ export default function App() {
           {loading && (
             <div className="loading">
               <Loader2 className="spin" size={20} />
-              Recherche dans Archive.org, Gallica et Google Books…
+              Recherche dans Archive.org, Gallica, Google Books, CIA et Noor Book…
             </div>
           )}
 
@@ -613,7 +672,7 @@ export default function App() {
       </main>
 
       <footer className="signature">
-        <div className="signature-inner">""</div>
+        <div className="signature-inner">✦ ولد صنهاجة ✦</div>
       </footer>
     </div>
   );
