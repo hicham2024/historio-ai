@@ -369,6 +369,7 @@ function ResultItem({ item }) {
 
 export default function App() {
   const [keyword, setKeyword] = useState("");
+  const [donModalOpen, setDonModalOpen] = useState(false);
   const [email, setEmail] = useState(
     localStorage.getItem("histobook_user_email") || ""
   );
@@ -376,7 +377,7 @@ export default function App() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState("all");
-const [onlyPdf, setOnlyPdf] = useState(false);
+  const [onlyPdf, setOnlyPdf] = useState(false);
   const filtered = useMemo(() => {
     return results.filter((item) => {
       if (sourceFilter !== "all" && item.source !== sourceFilter) return false;
@@ -497,6 +498,123 @@ const [onlyPdf, setOnlyPdf] = useState(false);
         .badge { justify-self: end; color: #7f1d1d; font-size: 12px; font-weight: 900; }
         .spin { animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        .don-btn {
+          border-color: #fbbf24;
+          color: #fef3c7;
+          font-family: inherit;
+          border-radius: 4px;
+        }
+        .don-btn:hover {
+          background: rgba(251, 191, 36, 0.18);
+        }
+        .don-modal-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 99999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+          background: rgba(5, 10, 20, 0.84);
+          backdrop-filter: blur(8px);
+        }
+        .don-modal {
+          position: relative;
+          width: min(440px, 100%);
+          max-height: 92vh;
+          overflow-y: auto;
+          padding: 34px 30px 28px;
+          text-align: center;
+          border: 1px solid rgba(251, 191, 36, 0.48);
+          border-radius: 22px;
+          background: linear-gradient(145deg, #0f766e, #115e59 48%, #7f1d1d);
+          color: #ffffff;
+          box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58);
+        }
+        .don-modal-close {
+          position: absolute;
+          top: 12px;
+          right: 14px;
+          width: 39px;
+          height: 39px;
+          display: grid;
+          place-items: center;
+          border: 1px solid rgba(255, 255, 255, 0.24);
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.10);
+          color: #ffffff;
+          font-size: 25px;
+          line-height: 1;
+          cursor: pointer;
+        }
+        .don-modal-close:hover {
+          background: rgba(255, 255, 255, 0.20);
+        }
+        .don-modal-icon {
+          width: 62px;
+          height: 62px;
+          margin: 0 auto 12px;
+          display: grid;
+          place-items: center;
+          border-radius: 50%;
+          background: rgba(251, 191, 36, 0.16);
+          color: #fbbf24;
+          border: 1px solid rgba(251, 191, 36, 0.38);
+        }
+        .don-modal h2 {
+          margin: 0 0 12px;
+          color: #fef3c7;
+          font-size: 26px;
+        }
+        .don-modal-text {
+          margin: 0;
+          color: rgba(255, 255, 255, 0.90);
+          line-height: 1.65;
+        }
+        .don-qr-container {
+          width: 250px;
+          max-width: 100%;
+          margin: 22px auto 14px;
+          padding: 14px;
+          border-radius: 18px;
+          background: #ffffff;
+          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.24);
+        }
+        .don-qr-image {
+          display: block;
+          width: 100%;
+          height: auto;
+          border-radius: 8px;
+        }
+        .don-scan-text {
+          margin: 0 0 18px;
+          color: rgba(255, 255, 255, 0.78);
+          font-size: 13px;
+          line-height: 1.6;
+        }
+        .don-online-button {
+          width: 100%;
+          min-height: 48px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 11px 18px;
+          border-radius: 10px;
+          background: #fbbf24;
+          color: #14213d;
+          text-decoration: none;
+          font-weight: 900;
+        }
+        .don-online-button:hover {
+          background: #f59e0b;
+        }
+        .don-secure-note {
+          margin: 14px 0 0;
+          color: rgba(255, 255, 255, 0.68);
+          font-size: 12px;
+        }
         @media (max-width: 760px) {
           .brand { font-size: 28px; }
           .userbar, .gate form { flex-direction: column; align-items: flex-start; }
@@ -530,9 +648,13 @@ const [onlyPdf, setOnlyPdf] = useState(false);
             </div>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <a className="don-btn" href={DONATION_LINK} target="_blank" rel="noreferrer">
-                <Heart size={14} /> DONS
-              </a>
+              <button
+                type="button"
+                className="don-btn"
+                onClick={() => setDonModalOpen(true)}
+              >
+                <Heart size={14} /> Faire un don
+              </button>
               {email && (
                 <button type="button" onClick={logout}>
                   <LogOut size={14} /> Déconnexion
@@ -620,6 +742,68 @@ const [onlyPdf, setOnlyPdf] = useState(false);
           </div>
         </section>
       </main>
+
+      {donModalOpen && (
+        <div
+          className="don-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="don-modal-title"
+          onClick={() => setDonModalOpen(false)}
+        >
+          <div
+            className="don-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="don-modal-close"
+              onClick={() => setDonModalOpen(false)}
+              aria-label="Fermer la fenêtre"
+            >
+              ×
+            </button>
+
+            <div className="don-modal-icon">
+              <Heart size={36} />
+            </div>
+
+            <h2 id="don-modal-title">Soutenir Histobook PDF</h2>
+
+            <p className="don-modal-text">
+              Scannez ce code QR avec votre téléphone pour effectuer
+              un don sécurisé via PayPal.
+            </p>
+
+            <div className="don-qr-container">
+              <img
+                src="/paypal-qr.png"
+                alt="Code QR PayPal pour soutenir Histobook PDF"
+                className="don-qr-image"
+              />
+            </div>
+
+            <p className="don-scan-text">
+              Ouvrez l’appareil photo ou l’application PayPal,
+              puis scannez le code.
+            </p>
+
+            <a
+              className="don-online-button"
+              href={DONATION_LINK}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Payer directement en ligne
+              <ExternalLink size={15} />
+            </a>
+
+            <p className="don-secure-note">
+              Paiement sécurisé via PayPal ou Stripe
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
