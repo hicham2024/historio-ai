@@ -59,9 +59,30 @@ function normalize(value = "") {
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
   )
-    .replace(/[+،,;:()[\]{}"'’`]/g, " ")
+    .replace(/[+،,;:()[\]{}"'’`!?./\\|_-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function stemToken(token = "") {
+  let value = normalize(token);
+  if (/^[\u0600-\u06FF]+$/.test(value)) {
+    if (value.startsWith("ال") && value.length > 4) value = value.slice(2);
+    for (const suffix of ["يات", "يون", "يين", "ية", "يه", "يا", "ات", "ون", "ين"]) {
+      if (value.endsWith(suffix) && value.length - suffix.length >= 4) {
+        value = value.slice(0, -suffix.length);
+        break;
+      }
+    }
+  }
+  return value;
+}
+
+function tokens(value = "") {
+  return normalize(value)
+    .split(" ")
+    .map(stemToken)
+    .filter((token) => token.length > 1);
 }
 
 function parseStructuredQuery(input) {
@@ -73,54 +94,89 @@ function parseStructuredQuery(input) {
   return {
     titleHint: parts[0] || input.trim(),
     contextHint: parts.length > 1 ? parts.slice(1).join(" ") : "",
+    structured: parts.length > 1,
   };
 }
 
-function buildQueries(input) {
-  const { titleHint, contextHint } = parseStructuredQuery(input);
-  const variants = new Set();
+function tokenCoverage(haystack, needle) {
+  const hay = tokens(haystack);
+  const wanted = tokens(needle);
+  if (!hay.length || !wanted.length) return 0;
 
-  if (contextHint) {
-    variants.add(`${titleHint} ${contextHint}`);
-    variants.add(titleHint);
-    variants.add(contextHint);
-  } else {
-    variants.add(titleHint);
+  let matched = 0;
+  for (const target of wanted) {
+    const found = hay.some(
+      (candidate) =>
+        candidate === target ||
+        (candidate.length >= 4 && target.length >= 4 &&
+          (candidate.startsWith(target) || target.startsWith(candidate)))
+    );
+    if (found) matched += 1;
   }
 
-  return Array.from(variants).filter(Boolean).slice(0, 3);
+  return matched / wanted.length;
 }
 
-function wordScore(haystack, needle) {
+function phraseScore(haystack, needle) {
   const h = normalize(haystack);
   const n = normalize(needle);
   if (!h || !n) return 0;
-  if (h === n) return 100;
-  if (h.includes(n)) return 70;
+  if (h === n) return 1;
+  if (h.includes(n)) return 0.9;
+  return tokenCoverage(h, n);
+}
 
-  const words = n.split(" ").filter((word) => word.length > 2);
-  if (!words.length) return 0;
-  const matches = words.filter((word) => h.includes(word)).length;
-  return Math.round((matches / words.length) * 45);
+function annotate(items, tier, queryUsed) {
+  return items.map((item) => ({ ...item, queryTier: tier, queryUsed }));
 }
 
 function scoreResult(item, originalQuery) {
-  const { titleHint, contextHint } = parseStructuredQuery(originalQuery);
+  const { titleHint, contextHint, structured } = parseStructuredQuery(originalQuery);
+
+  const titleTitle = phraseScore(item.title, titleHint);
+  const titleElsewhere = Math.max(
+    phraseScore(item.author, titleHint),
+    phraseScore(item.description, titleHint)
+  );
+
+  const contextAuthor = contextHint ? phraseScore(item.author, contextHint) : 0;
+  const contextTitle = contextHint ? phraseScore(item.title, contextHint) : 0;
+  const contextDescription = contextHint ? phraseScore(item.description, contextHint) : 0;
+  const contextBest = Math.max(contextAuthor, contextTitle, contextDescription);
+
   let score = 0;
 
-  score += wordScore(item.title, titleHint) * 2;
-  score += wordScore(item.author, contextHint || titleHint);
-  score += Math.round(wordScore(item.description, titleHint) * 0.45);
+  // Le titre ou sujet principal reste le signal dominant, comme dans un moteur académique.
+  score += Math.round(titleTitle * 320);
+  score += Math.round(titleElsewhere * 70);
 
-  if (contextHint) {
-    score += wordScore(item.title, contextHint);
-    score += Math.round(wordScore(item.description, contextHint) * 0.35);
+  if (structured) {
+    // A + B : les résultats qui satisfont les DEUX indices passent toujours devant.
+    if (titleTitle >= 0.5 && contextBest >= 0.5) {
+      score += 700;
+    } else if (titleTitle >= 0.5 && contextBest > 0) {
+      score += 390;
+    } else if (titleTitle >= 0.5) {
+      score += 130;
+    } else if (contextBest >= 0.5) {
+      score += 45;
+    } else {
+      score -= 220;
+    }
+
+    // Un auteur/créateur correspondant est plus fort qu'une simple mention dans la description.
+    score += Math.round(contextAuthor * 250);
+    score += Math.round(contextTitle * 120);
+    score += Math.round(contextDescription * 75);
   }
+
+  const tierBonus = { strict: 180, combined: 120, title: 25, context: 0 };
+  score += tierBonus[item.queryTier] || 0;
 
   if (item.digitized) score += 12;
   if (item.directPdf) score += 8;
   if (["archive", "gallica", "loc"].includes(item.source)) score += 8;
-  if (item.kind === "portal") score -= 25;
+  if (item.kind === "portal") score -= 60;
 
   return score;
 }
@@ -131,92 +187,135 @@ function asText(value, fallback = "") {
   return String(value);
 }
 
-async function searchArchive(keyword) {
+function escapeArchive(value = "") {
+  return String(value).replace(/["\\]/g, " ").trim();
+}
+
+function escapeCql(value = "") {
+  return String(value).replace(/"/g, " ").trim();
+}
+
+function buildSearchPlans(input) {
+  const { titleHint, contextHint, structured } = parseStructuredQuery(input);
+
+  if (!structured) {
+    return [
+      { tier: "strict", titleHint, contextHint: "" },
+      { tier: "combined", titleHint, contextHint: "" },
+    ];
+  }
+
+  return [
+    { tier: "strict", titleHint, contextHint },
+    { tier: "combined", titleHint, contextHint },
+    { tier: "title", titleHint, contextHint },
+    { tier: "context", titleHint, contextHint },
+  ];
+}
+
+function archiveQuery(plan) {
+  const t = escapeArchive(plan.titleHint);
+  const c = escapeArchive(plan.contextHint);
+
+  if (!c) return `title:("${t}") AND mediatype:texts`;
+  if (plan.tier === "strict") {
+    return `title:("${t}") AND (creator:("${c}") OR subject:("${c}") OR description:("${c}")) AND mediatype:texts`;
+  }
+  if (plan.tier === "combined") return `("${t}" AND "${c}") AND mediatype:texts`;
+  if (plan.tier === "title") return `title:("${t}") AND mediatype:texts`;
+  return `(creator:("${c}") OR subject:("${c}") OR description:("${c}")) AND mediatype:texts`;
+}
+
+async function searchArchive(plan) {
   try {
     const params = new URLSearchParams();
-    params.set("q", `(${keyword}) AND mediatype:texts`);
-    [
-      "identifier",
-      "title",
-      "creator",
-      "date",
-      "year",
-      "language",
-      "description",
-      "subject",
-    ].forEach((field) => params.append("fl[]", field));
-    params.set("rows", "20");
+    params.set("q", archiveQuery(plan));
+    ["identifier", "title", "creator", "date", "year", "language", "description", "subject"].forEach(
+      (field) => params.append("fl[]", field)
+    );
+    params.set("rows", plan.tier === "strict" ? "20" : "12");
     params.set("page", "1");
     params.set("output", "json");
 
-    const response = await fetch(
-      `https://archive.org/advancedsearch.php?${params.toString()}`
-    );
+    const response = await fetch(`https://archive.org/advancedsearch.php?${params.toString()}`);
     if (!response.ok) return [];
 
     const data = await response.json();
     const docs = data?.response?.docs || [];
 
-    return docs.map((doc) => ({
-      id: `archive-${doc.identifier}`,
-      source: "archive",
-      title: asText(doc.title, "Titre non disponible"),
-      author: asText(doc.creator, "Auteur non disponible"),
-      date: asText(doc.date || doc.year, "Date non disponible"),
-      language: asText(doc.language, "Langue non disponible"),
-      description: stripHtml(
-        asText(doc.description || doc.subject, "Document numérisé sur Internet Archive")
-      ),
-      pageUrl: `https://archive.org/details/${doc.identifier}`,
-      directPdf: "",
-      digitized: true,
-      access: "Livre / scan / fichiers disponibles",
-      kind: "record",
-    }));
+    return annotate(
+      docs.map((doc) => ({
+        id: `archive-${doc.identifier}`,
+        source: "archive",
+        title: asText(doc.title, "Titre non disponible"),
+        author: asText(doc.creator, "Auteur non disponible"),
+        date: asText(doc.date || doc.year, "Date non disponible"),
+        language: asText(doc.language, "Langue non disponible"),
+        description: stripHtml(asText(doc.description || doc.subject, "Document numérisé sur Internet Archive")),
+        pageUrl: `https://archive.org/details/${doc.identifier}`,
+        directPdf: "",
+        digitized: true,
+        access: "Livre / scan / fichiers disponibles",
+        kind: "record",
+      })),
+      plan.tier,
+      archiveQuery(plan)
+    );
   } catch {
     return [];
   }
 }
 
-async function searchGoogleBooks(keyword) {
+function googleQuery(plan) {
+  const t = plan.titleHint.trim();
+  const c = plan.contextHint.trim();
+  if (!c) return `intitle:${t}`;
+  if (plan.tier === "strict") return `intitle:${t} inauthor:${c}`;
+  if (plan.tier === "combined") return `"${t}" "${c}"`;
+  if (plan.tier === "title") return `intitle:${t}`;
+  return `inauthor:${c}`;
+}
+
+async function searchGoogleBooks(plan) {
   try {
     const params = new URLSearchParams();
-    params.set("q", keyword);
-    params.set("maxResults", "12");
+    params.set("q", googleQuery(plan));
+    params.set("maxResults", plan.tier === "strict" ? "20" : "12");
     params.set("printType", "books");
 
-    const response = await fetch(
-      `https://www.googleapis.com/books/v1/volumes?${params.toString()}`
-    );
+    const response = await fetch(`https://www.googleapis.com/books/v1/volumes?${params.toString()}`);
     if (!response.ok) return [];
 
     const data = await response.json();
-    return (data?.items || []).map((item) => {
-      const info = item.volumeInfo || {};
-      const access = item.accessInfo || {};
-      const directPdf = access.pdf?.downloadLink || "";
-      const pageUrl =
-        access.webReaderLink || info.previewLink || info.infoLink || "";
+    return annotate(
+      (data?.items || []).map((item) => {
+        const info = item.volumeInfo || {};
+        const access = item.accessInfo || {};
+        const directPdf = access.pdf?.downloadLink || "";
+        const pageUrl = access.webReaderLink || info.previewLink || info.infoLink || "";
 
-      return {
-        id: `google-${item.id}`,
-        source: "googleBooks",
-        title: info.title || "Titre non disponible",
-        author: asText(info.authors, "Auteur non disponible"),
-        date: info.publishedDate || "Date non disponible",
-        language: info.language || "Langue non disponible",
-        description: stripHtml(info.description || "Notice Google Books"),
-        pageUrl,
-        directPdf,
-        digitized: access.viewability && access.viewability !== "NO_PAGES",
-        access: directPdf
-          ? "PDF disponible"
-          : access.viewability && access.viewability !== "NO_PAGES"
-          ? "Aperçu / lecture en ligne"
-          : "Notice bibliographique",
-        kind: "record",
-      };
-    });
+        return {
+          id: `google-${item.id}`,
+          source: "googleBooks",
+          title: info.title || "Titre non disponible",
+          author: asText(info.authors, "Auteur non disponible"),
+          date: info.publishedDate || "Date non disponible",
+          language: info.language || "Langue non disponible",
+          description: stripHtml(info.description || "Notice Google Books"),
+          pageUrl,
+          directPdf,
+          digitized: access.viewability && access.viewability !== "NO_PAGES",
+          access: directPdf
+            ? "PDF disponible"
+            : access.viewability && access.viewability !== "NO_PAGES"
+            ? "Aperçu / lecture en ligne"
+            : "Notice bibliographique",
+          kind: "record",
+        };
+      }),
+      plan.tier,
+      googleQuery(plan)
+    );
   } catch {
     return [];
   }
@@ -239,11 +338,11 @@ function parseGallicaXml(xmlText) {
     const dates = xmlValues(record, "date");
     const languages = xmlValues(record, "language");
     const descriptions = xmlValues(record, "description");
+    const subjects = xmlValues(record, "subject");
     const types = xmlValues(record, "type");
     const identifiers = xmlValues(record, "identifier");
 
-    const pageUrl =
-      identifiers.find((value) => value.includes("gallica.bnf.fr")) || "";
+    const pageUrl = identifiers.find((value) => value.includes("gallica.bnf.fr")) || "";
 
     return {
       id: `gallica-${index}-${pageUrl || titles[0] || "record"}`,
@@ -253,7 +352,7 @@ function parseGallicaXml(xmlText) {
       date: dates[0] || "Date non disponible",
       language: languages.join(", ") || "Langue non disponible",
       description: stripHtml(
-        descriptions.join(" ") || types.join(", ") || "Document Gallica"
+        [descriptions.join(" "), subjects.join(" "), types.join(", ")].filter(Boolean).join(" ") || "Document Gallica"
       ),
       pageUrl,
       directPdf: "",
@@ -264,60 +363,78 @@ function parseGallicaXml(xmlText) {
   });
 }
 
-async function searchGallica(keyword) {
+function gallicaQuery(plan) {
+  const t = escapeCql(plan.titleHint);
+  const c = escapeCql(plan.contextHint);
+  if (!c) return `(dc.title all "${t}") or (gallica all "${t}")`;
+  if (plan.tier === "strict") {
+    return `(dc.title all "${t}") and ((dc.creator all "${c}") or (dc.subject all "${c}") or (dc.description all "${c}"))`;
+  }
+  if (plan.tier === "combined") return `(gallica all "${t}") and (gallica all "${c}")`;
+  if (plan.tier === "title") return `(dc.title all "${t}") or (gallica all "${t}")`;
+  return `(dc.creator all "${c}") or (dc.subject all "${c}") or (gallica all "${c}")`;
+}
+
+async function searchGallica(plan) {
   try {
-    const clean = keyword.replaceAll('"', " ").trim();
-    const query = `(dc.title all "${clean}") or (dc.creator all "${clean}") or (gallica all "${clean}")`;
     const params = new URLSearchParams();
     params.set("operation", "searchRetrieve");
     params.set("version", "1.2");
-    params.set("query", query);
-    params.set("maximumRecords", "20");
+    params.set("query", gallicaQuery(plan));
+    params.set("maximumRecords", plan.tier === "strict" ? "20" : "12");
 
-    const response = await fetch(
-      `https://gallica.bnf.fr/SRU?${params.toString()}`
-    );
+    const response = await fetch(`https://gallica.bnf.fr/SRU?${params.toString()}`);
     if (!response.ok) return [];
-    return parseGallicaXml(await response.text());
+    return annotate(parseGallicaXml(await response.text()), plan.tier, gallicaQuery(plan));
   } catch {
     return [];
   }
 }
 
-async function searchLibraryOfCongress(keyword) {
+function locQuery(plan) {
+  const t = plan.titleHint.trim();
+  const c = plan.contextHint.trim();
+  if (!c) return `"${t}"`;
+  if (plan.tier === "strict" || plan.tier === "combined") return `"${t}" "${c}"`;
+  if (plan.tier === "title") return `"${t}"`;
+  return `"${c}"`;
+}
+
+async function searchLibraryOfCongress(plan) {
   try {
     const params = new URLSearchParams();
-    params.set("q", keyword);
+    params.set("q", locQuery(plan));
     params.set("fo", "json");
-    params.set("c", "20");
+    params.set("c", plan.tier === "strict" ? "20" : "12");
     params.set("at", "results,pagination");
 
     const response = await fetch(`https://www.loc.gov/search/?${params.toString()}`);
     if (!response.ok) return [];
     const data = await response.json();
 
-    return (data?.results || []).map((item, index) => {
-      const contributors =
-        item.contributor || item.contributors || item.creator || item.created_published;
-      const formats = asText(item.online_format || item.original_format || item.format);
+    return annotate(
+      (data?.results || []).map((item, index) => {
+        const contributors = item.contributor || item.contributors || item.creator || item.created_published;
+        const formats = asText(item.online_format || item.original_format || item.format);
 
-      return {
-        id: `loc-${item.id || index}`,
-        source: "loc",
-        title: item.title || "Titre non disponible",
-        author: asText(contributors, "Auteur / institution non disponible"),
-        date: asText(item.date || item.dates, "Date non disponible"),
-        language: asText(item.language, "Langue non disponible"),
-        description: stripHtml(
-          asText(item.description || item.subject || formats, "Collection Library of Congress")
-        ),
-        pageUrl: item.id || item.url || "",
-        directPdf: "",
-        digitized: Boolean(item.id),
-        access: formats ? `En ligne : ${formats}` : "Notice / document en ligne",
-        kind: "record",
-      };
-    });
+        return {
+          id: `loc-${item.id || index}`,
+          source: "loc",
+          title: item.title || "Titre non disponible",
+          author: asText(contributors, "Auteur / institution non disponible"),
+          date: asText(item.date || item.dates, "Date non disponible"),
+          language: asText(item.language, "Langue non disponible"),
+          description: stripHtml(asText(item.description || item.subject || formats, "Collection Library of Congress")),
+          pageUrl: item.id || item.url || "",
+          directPdf: "",
+          digitized: Boolean(item.id),
+          access: formats ? `En ligne : ${formats}` : "Notice / document en ligne",
+          kind: "record",
+        };
+      }),
+      plan.tier,
+      locQuery(plan)
+    );
   } catch {
     return [];
   }
@@ -331,8 +448,7 @@ function externalPortalResults(keyword) {
       title: `Rechercher « ${keyword} » dans PARES (Espagne)`,
       author: "Ministerio de Cultura – Archivos Estatales",
       pageUrl: "https://pares.cultura.gob.es/pares/es/inicio.html",
-      description:
-        "Catalogue officiel des archives espagnoles : Archivo General de Simancas, Archivo Histórico Nacional, Archivo de la Corona de Aragón et autres fonds.",
+      description: "Catalogue officiel des archives espagnoles : Archivo General de Simancas, Archivo Histórico Nacional, Archivo de la Corona de Aragón et autres fonds.",
     },
     {
       source: "cia",
@@ -380,17 +496,24 @@ function externalPortalResults(keyword) {
     digitized: false,
     access: "Ouvrir le portail de recherche",
     kind: "portal",
+    queryTier: "context",
   }));
 }
 
 function dedupeResults(results) {
-  const seen = new Set();
-  return results.filter((item) => {
+  const best = new Map();
+
+  for (const item of results) {
     const key = normalize(`${item.source}|${item.title}|${item.author}`);
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+    if (!key) continue;
+
+    const existing = best.get(key);
+    if (!existing || (item.queryTier === "strict" && existing.queryTier !== "strict")) {
+      best.set(key, item);
+    }
+  }
+
+  return Array.from(best.values());
 }
 
 function ResultItem({ item }) {
@@ -411,10 +534,9 @@ function ResultItem({ item }) {
           </p>
         )}
         <div className="actions">
-          <span className="source" style={{ color: sourceColor }}>
-            {SOURCES[item.source] || item.source}
-          </span>
+          <span className="source" style={{ color: sourceColor }}>{SOURCES[item.source] || item.source}</span>
           <span className="access">{item.access}</span>
+          {item.queryTier === "strict" && item.kind !== "portal" && <span className="match-chip">Correspondance forte</span>}
           {item.directPdf && (
             <a className="pdf-btn" href={item.directPdf} target="_blank" rel="noreferrer">
               <Download size={14} /> PDF
@@ -441,6 +563,7 @@ export default function App() {
   const [sourceFilter, setSourceFilter] = useState("all");
   const [accessFilter, setAccessFilter] = useState("all");
   const [searched, setSearched] = useState(false);
+  const [lastQuery, setLastQuery] = useState("");
 
   const filtered = useMemo(() => {
     return results.filter((item) => {
@@ -458,27 +581,29 @@ export default function App() {
 
     setLoading(true);
     setSearched(true);
+    setLastQuery(clean);
     setResults([]);
 
-    const variants = buildQueries(clean);
+    const plans = buildSearchPlans(clean);
 
     try {
       const liveBatches = await Promise.all(
-        variants.map(async (variant) => {
+        plans.map(async (plan) => {
           const [archive, gallica, googleBooks, loc] = await Promise.all([
-            searchArchive(variant),
-            searchGallica(variant),
-            searchGoogleBooks(variant),
-            searchLibraryOfCongress(variant),
+            searchArchive(plan),
+            searchGallica(plan),
+            searchGoogleBooks(plan),
+            searchLibraryOfCongress(plan),
           ]);
           return [...archive, ...gallica, ...googleBooks, ...loc];
         })
       );
 
       const portals = externalPortalResults(clean);
-      const merged = dedupeResults([...liveBatches.flat(), ...portals]).sort(
-        (a, b) => scoreResult(b, clean) - scoreResult(a, clean)
-      );
+      const merged = dedupeResults([...liveBatches.flat(), ...portals])
+        .map((item) => ({ ...item, relevance: scoreResult(item, clean) }))
+        .filter((item) => item.kind === "portal" || item.relevance > -100)
+        .sort((a, b) => b.relevance - a.relevance);
 
       setResults(merged);
     } finally {
@@ -487,6 +612,7 @@ export default function App() {
   }
 
   const sourceKeys = Object.keys(SOURCES);
+  const structured = parseStructuredQuery(lastQuery).structured;
 
   return (
     <div className="page" dir="ltr" lang="fr">
@@ -509,7 +635,8 @@ export default function App() {
         .filter-btn.active { font-weight:800; color:#0f766e; }
         .filter-group { padding-bottom:18px; margin-bottom:18px; border-bottom:1px solid #ddd3c5; }
         .results-title { margin:0; color:#366d6a; font-size:27px; }
-        .count { margin:5px 0 18px; color:#8a563d; font-size:14px; }
+        .count { margin:5px 0 8px; color:#8a563d; font-size:14px; }
+        .query-mode { margin:0 0 18px; padding:9px 11px; background:#eef6f0; border-left:3px solid #0f766e; color:#315f55; font-size:13px; }
         .result-item { display:flex; justify-content:space-between; gap:18px; padding:20px 0; border-top:1px solid #ded6c9; }
         .result-main { min-width:0; }
         .title { color:#145ea8; font-size:19px; font-weight:700; text-decoration:none; }
@@ -521,6 +648,7 @@ export default function App() {
         .source { font-weight:800; }
         .access { color:#365314; }
         .pdf-btn { font-weight:800; }
+        .match-chip { background:#fff4ce; color:#795400; padding:2px 6px; border-radius:10px; font-weight:700; }
         .badge { flex:0 0 auto; height:28px; padding:6px 9px; border-radius:4px; background:#e6f4ea; color:#166534; font-size:11px; font-weight:800; }
         .badge.portal { background:#e5e7eb; color:#374151; }
         .empty { padding:40px 0; color:#6b7280; font-size:18px; }
@@ -578,11 +706,18 @@ export default function App() {
         <section>
           <h1 className="results-title">Sources historiques</h1>
           {searched && !loading && (
-            <div className="count">{filtered.length} résultat(s) affiché(s) sur {results.length} référence(s)</div>
+            <>
+              <div className="count">{filtered.length} résultat(s) affiché(s) sur {results.length} référence(s)</div>
+              {structured && (
+                <div className="query-mode">
+                  Recherche combinée : priorité aux documents qui correspondent simultanément aux deux parties séparées par +. Les résultats partiels ne servent qu'en élargissement.
+                </div>
+              )}
+            </>
           )}
 
           {loading && (
-            <div className="loading"><Loader2 size={20} /> Recherche simultanée dans plusieurs bibliothèques et archives…</div>
+            <div className="loading"><Loader2 size={20} /> Recherche académique : combinaison stricte d'abord, puis élargissement contrôlé…</div>
           )}
 
           {!loading && !searched && (
