@@ -441,6 +441,8 @@ export default function App() {
             <span>PDF</span>
           </div>
 
+          <a className="bawaba-return" href="https://bawaba.eu/" target="_self">↗ العودة إلى بوابة / Retour à Bawaba</a>
+
           <div className="subtitle">
             محرك بحث للكتب التاريخية المجانية وملفات PDF والوثائق العامة.
           </div>
