@@ -4,10 +4,7 @@ import {
   ExternalLink,
   BookOpen,
   Loader2,
-  Mail,
-  Lock,
   Download,
-  LogOut,
 } from "lucide-react";
 
 const SOURCES = {
@@ -367,10 +364,7 @@ function ResultItem({ item }) {
 
 export default function App() {
   const [keyword, setKeyword] = useState("");
-  const [email, setEmail] = useState(
-    localStorage.getItem("histobook_user_email") || ""
-  );
-  const [emailInput, setEmailInput] = useState("");
+  const [searchLanguage, setSearchLanguage] = useState("all");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState("all");
@@ -383,44 +377,8 @@ export default function App() {
     });
   }, [results, sourceFilter, onlyPdf]);
 
-  async function connectWithEmail(event) {
-    event.preventDefault();
-
-    const value = emailInput.trim().toLowerCase();
-    const isValid = /^\S+@\S+\.\S+$/.test(value);
-
-    if (!isValid) return;
-
-    try {
-      const formData = new URLSearchParams();
-      formData.append("form-name", "clients");
-      formData.append("email", value);
-      formData.append("source", "Histobook");
-
-      await fetch("/", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formData.toString(),
-      });
-    } catch {
-      // L'utilisateur peut continuer même si Netlify Forms ne répond pas.
-    }
-
-    localStorage.setItem("histobook_user_email", value);
-    setEmail(value);
-    setEmailInput("");
-  }
-
-  function logout() {
-    localStorage.removeItem("histobook_user_email");
-    setEmail("");
-    setResults([]);
-  }
-
   async function runSearch(event) {
     event.preventDefault();
-
-    if (!email) return;
 
     const clean = keyword.trim();
     if (!clean) return;
@@ -428,6 +386,7 @@ export default function App() {
     setLoading(true);
     setResults([]);
 
+    // Unicode queries work directly for Arabic, French, English, Spanish and more.
     const queries = buildQueries(clean);
 
     const settled = await Promise.all(
@@ -486,61 +445,17 @@ export default function App() {
             محرك بحث للكتب التاريخية المجانية وملفات PDF والوثائق العامة.
           </div>
 
-          <div className="userbar">
-            <div>
-              {email ? (
-                <>متصل ✅</>
-              ) : (
-                <>سجّل الدخول ببريدك الإلكتروني لاستخدام البحث.</>
-              )}
-            </div>
-
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {email && (
-                <button type="button" onClick={logout}>
-                  <LogOut size={14} /> تسجيل الخروج
-                </button>
-              )}
-            </div>
-          </div>
-
-          {!email && (
-            <div className="gate">
-              <div className="gate-title">
-                <Lock size={18} /> يلزم تسجيل الدخول بالبريد الإلكتروني
-              </div>
-
-              <div>
-                أدخل بريدك الإلكتروني للوصول إلى البحث. لن يظهر عنوانك على الصفحة.
-              </div>
-
-              <form onSubmit={connectWithEmail}>
-                <input
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  placeholder="بريدك@example.com"
-                  type="email"
-                />
-
-                <button type="submit">
-                  <Mail size={16} /> تسجيل الدخول
-                </button>
-              </form>
-            </div>
-          )}
-
           <form
-            className={`search-row ${!email ? "disabled" : ""}`}
+            className="search-row"
             onSubmit={runSearch}
           >
             <input
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               placeholder="ابحث عن كتاب تاريخي أو ملف PDF أو وثيقة أرشيفية…"
-              disabled={!email}
             />
 
-            <button disabled={loading || !email} type="submit">
+            <button disabled={loading} type="submit">
               {loading ? (
                 <Loader2 className="spin" size={22} />
               ) : (
@@ -549,8 +464,17 @@ export default function App() {
             </button>
           </form>
 
-          <div className="search-help">
-            يمكنك البحث بالكلمات المفتاحية بالعربية أو الفرنسية أو الإنجليزية.
+          <div className="search-help" style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+            <label htmlFor="search-language">لغة البحث:</label>
+            <select id="search-language" value={searchLanguage} onChange={(event) => setSearchLanguage(event.target.value)} style={{padding:"8px 12px",borderRadius:6}}>
+              <option value="all">جميع اللغات / Toutes les langues</option>
+              <option value="ar">العربية</option>
+              <option value="fr">Français</option>
+              <option value="en">English</option>
+              <option value="es">Español</option>
+              <option value="other">لغات أخرى / Other languages</option>
+            </select>
+            <span>يمكنك كتابة كلمات البحث بأي لغة. اختيار اللغة إرشادي ولا يستبعد نتائج بلغات أخرى.</span>
           </div>
         </div>
       </header>
@@ -601,7 +525,7 @@ export default function App() {
             </div>
           )}
 
-          {!loading && results.length > 0 && filtered.length === 0 && email && (
+          {!loading && results.length > 0 && filtered.length === 0 && (
             <div className="empty">
               لم يتم العثور على ملف PDF. جرّب كلمة مفتاحية أخرى أو ألغِ خيار «PDF مباشر فقط».
             </div>
